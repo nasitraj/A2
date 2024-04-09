@@ -2,16 +2,28 @@
 #include <avr_debugger.h>
 #include <USART.h>
 #include <LCD.h>
+#include <PWM.h>
 #define  Trigger_pin	PC5	/* Trigger pin */
+#define BUTTON PC4  //interrupt source on INT0
 
-int TimerOverflow = 0;
+int TimerOverflow = 0;	
 
+bool distanceFlag = true;
 ISR(TIMER1_OVF_vect)
 {
+	
 	TimerOverflow++;		/* Increment Timer Overflow count */
 }
 
 
+ISR(PCINT1_vect)
+{
+	if(distanceFlag){
+		distanceFlag = false;
+	}else{
+		distanceFlag = true;
+	}
+}
 int main()
 {
 
@@ -27,8 +39,14 @@ int main()
 	 DDRC |= (1 << Trigger_pin);			/* Make trigger pin as output */
 	 DDRB &= ~(1<<PB0);			
 	 PORTB |= (1 << Trigger_pin);			/* Turn on Pull-up */
+	DDRC &=~(1<<BUTTON); //set PD2/INT0 as input
+  	PORTC|= (1<<BUTTON); // activate pull-up
+
+	PCICR|= (1<<PCIE1); // set INT0 for falling edge mode
+  	PCMSK1|=(1<<PCINT12); //enable PCINT12
 	
 	USART_init();
+	initDutyCycle();
 	USART_send_string("Ultrasonic");
 	USART_send('\n');
 	 LCD_command(1);
@@ -39,7 +57,7 @@ int main()
 	sei();					/* Enable global interrupt */
 	TIMSK1 = (1 << TOIE1);	/* Enable Timer1 overflow interrupts */
 	// TCCR1A = 0;				/* Set all bit to zero Normal operation */
-
+	
 	while(1)
 	{
 
@@ -65,9 +83,22 @@ int main()
 		count = ICR1 + (65535 * TimerOverflow);	/* Take value of capture register */
 		/* 16MHz Timer freq, sound speed =343 m/s,  17150 x Timer value * 0.0625 x 10 ^ -6 = Timer value / 932.8*/
 		distance = (double)count / 932.8;
+		if(distance < 10){
+				setDutyCycle(255,0, 0); 
+			}else{
+				setDutyCycle(0,255, 0); 
+			}
+		if(distanceFlag){
+			
+			distance *= 10;
+			dtostrf(distance, 2, 2, string);/* Convert distance into string */
+			strcat(string, " mm   ");
+		}else{
+			dtostrf(distance, 2, 2, string);/* Convert distance into string */
+			strcat(string, " cm   ");
+		}
 
-		dtostrf(distance, 2, 2, string);/* Convert distance into string */
-		strcat(string, " cm   ");
+		
 		USART_send_string("Dist = ");
 		LCD_command(1);
 		LCD_string("Ultrasonic1");
