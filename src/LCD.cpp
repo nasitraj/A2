@@ -1,5 +1,5 @@
 #include <LCD.h>
-
+volatile uint8_t timer_overflow_count = 0;
 // initialize port pins then initialize LCD controller
 void LCD_init(void)
 {
@@ -94,9 +94,42 @@ void LCD_string(char *str)
 // variable delay time
 void delayMs(uint16_t ms)
 {
-	while (ms > 0)
-	{
-		_delay_ms(1);
-		ms--;
-	}
+	// TCNT0=0x00;
+	// TCCR0B |= (1<<CS00) | (1<<CS02);
+	// while (ms > 0)
+	// {
+	// 	while ((TIFR0 & (1<<TOV0)) == 0); //check if overflow flag is set
+	// 	 TCNT0 = 0x00;
+	// 	 TIFR0|=(1<<TOV0);
+	// 	//_delay_ms(1);
+	// 	ms--;
+	// }
+
+     // Set Timer0 prescaler to 64
+    TCCR0B |= (1 << CS01) | (1 << CS00);
+
+	unsigned long fq = 16000000UL/64;
+	uint32_t tick = 1/(fq);
+	//uint16_t ticks = ms/(tick*100000UL);
+
+	
+    // Calculate number of ticks for the delay
+    uint16_t ticks = (ms * 16000000UL) / (64UL * 10000UL);
+
+    // Reset Timer0 counter
+    TCNT0 = 0;
+
+    // Wait until the required number of ticks occur
+    while (ticks > 0) {
+        if (TIFR0 & (1 << TOV0)) {
+            // Clear Timer0 overflow flag
+            TIFR0 |= (1 << TOV0);
+            // Decrement ticks
+            ticks--;
+        }
+    }
+
+    // Disable Timer0
+    TCCR0B = 0;
 }
+

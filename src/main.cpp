@@ -8,10 +8,9 @@
 
 int TimerOverflow = 0;	
 
-bool distanceFlag = true;
+volatile bool distanceFlag = true;
 ISR(TIMER1_OVF_vect)
 {
-	
 	TimerOverflow++;		/* Increment Timer Overflow count */
 }
 
@@ -52,8 +51,7 @@ int main()
 	 LCD_command(1);
 	 LCD_string("Ultrasonic1");
 	 LCD_command(0xC0);
-	// LCD_string("Temp: ");
-	_delay_ms(1000);
+	
 	sei();					/* Enable global interrupt */
 	TIMSK1 = (1 << TOIE1);	/* Enable Timer1 overflow interrupts */
 	// TCCR1A = 0;				/* Set all bit to zero Normal operation */
@@ -62,7 +60,33 @@ int main()
 	{
 
 		PORTC |= (1 << Trigger_pin);/* Give 10us trigger pulse on trig. pin to HC-SR04 */
-		_delay_us(10);
+		// Set Timer0 prescaler to 64
+		TCCR0B |= (1 << CS01) | (1 << CS00);
+
+		unsigned long fq = 16000000UL/64;
+		uint32_t tick = 1/(fq);
+		//uint16_t ticks = ms/(tick*100000UL);
+
+		
+		// Calculate number of ticks for the delay
+		uint16_t ticks = (10 * 16000000UL) / (64UL * 1000000UL);
+
+		// Reset Timer0 counter
+		TCNT0 = 0;
+
+		// Wait until the required number of ticks occur
+		while (ticks > 0) {
+			if (TIFR0 & (1 << TOV0)) {
+				// Clear Timer0 overflow flag
+				TIFR0 |= (1 << TOV0);
+				// Decrement ticks
+				ticks--;
+			}
+		}
+
+		// Disable Timer0
+		TCCR0B = 0;
+		//_delay_us(10);
 		PORTC &= (~(1 << Trigger_pin));
 		
 		TCNT1 = 0;			/* Clear Timer counter */
@@ -85,7 +109,7 @@ int main()
 		distance = (double)count / 932.8;
 		if(distance < 10){
 				setDutyCycle(255,0, 0); 
-			}else{
+			}else if(distance > 10){
 				setDutyCycle(0,255, 0); 
 			}
 		if(distanceFlag){
@@ -101,12 +125,13 @@ int main()
 		
 		USART_send_string("Dist = ");
 		LCD_command(1);
-		LCD_string("Ultrasonic1");
+		LCD_string("Ultrasonic");
 		LCD_command(0xC0);
 		LCD_string(string);
 		USART_send_string(string);	/* Print distance on serial monitor */
 		USART_send('\n');
-		_delay_ms(200);
+		delayMs(20);
+		//_delay_ms(2000);
 	}
 
 
